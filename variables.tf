@@ -37,6 +37,12 @@ variable "instance_type" {
   default     = "t3.medium"
 }
 
+variable "tfc_agent_token" {
+  type        = string
+  description = "HCP Terraform agent token."
+  sensitive   = true
+}
+
 variable "tfc_agent_version" {
   type        = string
   description = "Version of the HCP Terraform agent to install."

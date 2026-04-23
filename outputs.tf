@@ -17,3 +17,8 @@ output "security_group" {
   description = "HCP Terraform agent security group."
   value       = aws_security_group.agent
 }
+
+output "tfc_agent_token_secret_arn" {
+  description = "ARN of the Secrets Manager secret containing the HCP Terraform agent token."
+  value       = aws_secretsmanager_secret.tfc_agent_token.arn
+}
