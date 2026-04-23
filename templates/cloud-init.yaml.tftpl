@@ -1,0 +1,197 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - awscli
+  - curl
+  - git
+  - gnupg
+  - gzip
+  - jq
+  - openssh-client
+  - tar
+  - unzip
+  - wget
+
+groups:
+  - tfc-agent
+
+users:
+  - name: tfc-agent
+    system: true
+    primary_group: tfc-agent
+    shell: /usr/sbin/nologin
+    homedir: /var/lib/tfc-agent
+    no_create_home: true
+
+write_files:
+  - path: /etc/systemd/system/tfc-agent.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=HCP Terraform Agent
+      Documentation=https://developer.hashicorp.com/terraform/cloud-docs/agents
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      User=tfc-agent
+      Group=tfc-agent
+
+      # systemd creates these with the service user's ownership and the mode below
+      StateDirectory=tfc-agent
+      StateDirectoryMode=0750
+      CacheDirectory=tfc-agent
+      CacheDirectoryMode=0750
+
+      Environment=TFC_AGENT_DATA_DIR=/var/lib/tfc-agent
+      Environment=TFC_AGENT_CACHE_DIR=/var/cache/tfc-agent
+      Environment=TFC_AGENT_AUTO_UPDATE=minor
+
+      # Sensitive configuration is fetched at boot and written here
+      EnvironmentFile=/etc/tfc-agent/agent.env
+
+      ExecStart=/usr/bin/tfc-agent
+      Restart=on-failure
+      RestartSec=10s
+
+      # Hardening
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=true
+      PrivateTmp=true
+      PrivateDevices=true
+      ProtectKernelTunables=true
+      ProtectKernelModules=true
+      ProtectControlGroups=true
+      RestrictSUIDSGID=true
+      LockPersonality=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/sbin/install-tfc-agent
+    owner: root:root
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      # Installs the HCP Terraform Agent binaries.
+      # Package installation is handled by cloud-init.
+
+      set -ef
+
+      readonly TFC_AGENT_VERSION="${tfc_agent_version}"
+
+      log_info() {
+        printf '[INFO]  %s\n' "$${1}"
+      }
+
+      log_error() {
+        printf '[ERROR] %s\n' "$${1}" >&2
+      }
+
+      detect_system_architecture() {
+        machine="$(uname -m)"
+        case "$${machine}" in
+          x86_64) printf 'amd64' ;;
+          aarch64) printf 'arm64' ;;
+          *)
+            log_error "Unsupported architecture: $${machine}"
+            return 1
+            ;;
+        esac
+      }
+
+      download_and_verify_agent() {
+        version="$${1}"
+        arch="$${2}"
+        tmp_dir="$${3}"
+
+        base_url="https://releases.hashicorp.com/tfc-agent/$${version}"
+        zip_file="tfc-agent_$${version}_linux_$${arch}.zip"
+        sums_file="tfc-agent_$${version}_SHA256SUMS"
+        sig_file="tfc-agent_$${version}_SHA256SUMS.sig"
+
+        curl -fsSL -o "$${tmp_dir}/$${zip_file}" "$${base_url}/$${zip_file}"
+        curl -fsSL -o "$${tmp_dir}/$${sums_file}" "$${base_url}/$${sums_file}"
+        curl -fsSL -o "$${tmp_dir}/$${sig_file}" "$${base_url}/$${sig_file}"
+
+        export GNUPGHOME="$${tmp_dir}/.gnupg"
+        mkdir -p "$${GNUPGHOME}"
+        chmod 0700 "$${GNUPGHOME}"
+
+        curl -fsSL -o "$${tmp_dir}/hashicorp.asc" \
+          https://www.hashicorp.com/.well-known/pgp-key.txt
+        gpg --quiet --import "$${tmp_dir}/hashicorp.asc"
+        printf '%s\n' "C874011F0AB405110D02105534365D9472D7468F:6:" | gpg --quiet --import-ownertrust
+
+        log_info "Verifying GPG signature"
+        gpg --quiet --verify "$${tmp_dir}/$${sig_file}" "$${tmp_dir}/$${sums_file}"
+
+        log_info "Verifying SHA256 checksum"
+        cd "$${tmp_dir}" || return 1
+        sha256sum -c --ignore-missing "$${sums_file}"
+        cd / || return 1
+      }
+
+      install_agent() {
+        log_info "Installing HCP Terraform Agent $${TFC_AGENT_VERSION}"
+        tmp_dir="$(mktemp -d)"
+
+        arch="$(detect_system_architecture)"
+        download_and_verify_agent "$${TFC_AGENT_VERSION}" "$${arch}" "$${tmp_dir}"
+
+        unzip -o -q "$${tmp_dir}/tfc-agent_$${TFC_AGENT_VERSION}_linux_$${arch}.zip" -d "$${tmp_dir}"
+
+        mv "$${tmp_dir}/tfc-agent" /usr/bin/tfc-agent
+        mv "$${tmp_dir}/tfc-agent-core" /usr/bin/tfc-agent-core
+
+        chown root:root /usr/bin/tfc-agent /usr/bin/tfc-agent-core
+        chmod 0755 /usr/bin/tfc-agent /usr/bin/tfc-agent-core
+
+        ln -sf /usr/bin/tfc-agent /usr/local/bin/tfc-agent
+        ln -sf /usr/bin/tfc-agent-core /usr/local/bin/tfc-agent-core
+
+        rm -rf "$${tmp_dir}"
+        log_info "HCP Terraform Agent $${TFC_AGENT_VERSION} installed"
+      }
+
+      install_agent
+
+  - path: /usr/local/sbin/configure-tfc-agent
+    owner: root:root
+    permissions: '0750'
+    content: |
+      #!/bin/sh
+      # Fetches the HCP Terraform Agent token from AWS Secrets Manager
+      # and writes it to the systemd EnvironmentFile.
+
+      set -ef
+
+      readonly SECRET_ID="${tfc_agent_token_secret_id}"
+      readonly AWS_REGION="${aws_region}"
+      readonly CONFIG_DIR="/etc/tfc-agent"
+      readonly ENV_FILE="$${CONFIG_DIR}/agent.env"
+
+      token="$(aws secretsmanager get-secret-value \
+        --secret-id "$${SECRET_ID}" \
+        --region "$${AWS_REGION}" \
+        --query 'SecretString' \
+        --output text)"
+
+      install -d -m 0750 -o root -g tfc-agent "$${CONFIG_DIR}"
+
+      umask 0027
+      printf 'TFC_AGENT_TOKEN=%s\n' "$${token}" > "$${ENV_FILE}"
+      chown root:tfc-agent "$${ENV_FILE}"
+      chmod 0640 "$${ENV_FILE}"
+
+runcmd:
+  - [ /usr/local/sbin/install-tfc-agent ]
+  - [ /usr/local/sbin/configure-tfc-agent ]
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, --now, tfc-agent.service ]

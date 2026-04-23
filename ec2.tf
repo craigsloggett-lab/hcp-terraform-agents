@@ -18,8 +18,10 @@ resource "aws_launch_template" "agent" {
     instance_metadata_tags      = "enabled"
   }
 
-  user_data = base64encode(templatefile("${path.module}/templates/user-data.sh.tftpl", {
-    tfc_agent_version = var.tfc_agent_version
+  user_data = base64encode(templatefile("${path.module}/templates/cloud-init.yaml.tftpl", {
+    tfc_agent_version         = var.tfc_agent_version
+    tfc_agent_token_secret_id = aws_secretsmanager_secret.tfc_agent_token.id
+    aws_region                = data.aws_region.current.id
   }))
 
   tag_specifications {
