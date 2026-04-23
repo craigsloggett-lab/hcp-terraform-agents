@@ -5,6 +5,7 @@ package_upgrade: false
 
 packages:
   - awscli
+  - petname
   - curl
   - git
   - gnupg
@@ -187,6 +188,7 @@ write_files:
 
       umask 0027
       printf 'TFC_AGENT_TOKEN=%s\n' "$${token}" > "$${ENV_FILE}"
+      printf 'TFC_AGENT_NAME=%s\n' "$(petname)" >> "$${ENV_FILE}"
       chown root:tfc-agent "$${ENV_FILE}"
       chmod 0640 "$${ENV_FILE}"
 
