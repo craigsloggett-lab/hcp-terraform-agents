@@ -1,3 +1,11 @@
-# Any file ending in .auto.tfvars is automatically loaded in lexicographical 
-# order, enabling the ability to split variable definitions into multiple 
+# Any file ending in .auto.tfvars is automatically loaded in lexicographical
+# order, enabling the ability to split variable definitions into multiple
 # files.
+
+project_name = "lab"
+vpc_name     = "my-vpc"
+
+aws_ami = {
+  owner = "099720109477"
+  name  = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
+}
