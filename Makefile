@@ -36,6 +36,7 @@ validate:
 
 fmt:
 	terraform fmt --recursive
+	shfmt -i 2 -ci -w templates/user-data.sh.tftpl
 
 lint:
 	tflint --recursive --format=compact

@@ -37,6 +37,17 @@ variable "instance_type" {
   default     = "t3.medium"
 }
 
+variable "tfc_agent_version" {
+  type        = string
+  description = "Version of the HCP Terraform agent to install."
+  default     = "1.28.7"
+
+  validation {
+    condition     = can(regex("^\\d+\\.\\d+\\.\\d+$", var.tfc_agent_version))
+    error_message = "Must be a valid semver version (e.g., 1.28.7)."
+  }
+}
+
 variable "agent_count" {
   type        = number
   description = "Desired number of HCP Terraform agent instances."

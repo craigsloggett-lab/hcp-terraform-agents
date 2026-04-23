@@ -18,6 +18,10 @@ resource "aws_launch_template" "agent" {
     instance_metadata_tags      = "enabled"
   }
 
+  user_data = base64encode(templatefile("${path.module}/templates/user-data.sh.tftpl", {
+    tfc_agent_version = var.tfc_agent_version
+  }))
+
   tag_specifications {
     resource_type = "instance"
     tags = merge(var.common_tags, {
