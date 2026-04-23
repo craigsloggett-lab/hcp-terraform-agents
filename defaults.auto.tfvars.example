@@ -2,8 +2,9 @@
 # order, enabling the ability to split variable definitions into multiple
 # files.
 
-project_name = "lab"
-vpc_name     = "my-vpc"
+project_name    = "lab"
+vpc_name        = "my-vpc"
+tfc_agent_token = "my-token"
 
 aws_ami = {
   owner = "099720109477"
