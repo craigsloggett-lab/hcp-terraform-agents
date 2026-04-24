@@ -1,5 +1,12 @@
 #cloud-config
 
+ntp:
+  enabled: true
+  ntp_client: chrony
+  servers:
+    - 169.254.169.123
+  pools: []
+
 package_update: true
 package_upgrade: false
 
