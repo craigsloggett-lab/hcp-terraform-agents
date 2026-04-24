@@ -1,5 +1,6 @@
 resource "aws_secretsmanager_secret" "tfc_agent_token" {
   name_prefix = "${var.project_name}-hcp-terraform-agent-token-"
+  description = "HCP Terraform Agent Token"
 
   tags = merge(var.common_tags, { Name = "${var.project_name}-hcp-terraform-agent-token" })
 }
