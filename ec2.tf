@@ -21,7 +21,7 @@ resource "aws_launch_template" "agent" {
   user_data = base64encode(templatefile("${path.module}/templates/cloud-init.yaml.tftpl", {
     tfc_agent_version         = var.tfc_agent_version
     tfc_agent_token_secret_id = aws_secretsmanager_secret.tfc_agent_token.id
-    aws_region                = data.aws_region.current.id
+    aws_region                = data.aws_region.current.region
   }))
 
   tag_specifications {
